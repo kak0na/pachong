@@ -1,0 +1,77 @@
+from urllib import request
+import requests
+from bs4 import BeautifulSoup
+import json
+import re
+import os
+
+def get_html(url):
+    header={
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36',
+        'Referer':'http://music.163.com/',
+        'Host':'music.163.com',
+    }
+    try:
+        url_response=requests.get(url,headers=header,timeout=5)
+        url_response.encoding=url_response.apparent_encoding
+        html=url_response.text
+        return html
+    except:
+        return""
+
+def get_singer_info(html):
+    global singername
+    singername=re.findall(r'content="分享歌手：.*?"',str(html))[0].split('：')[1][:-1]
+    soup=BeautifulSoup(html)
+    infos=soup.find('ul',class_='f-hide').find_all('a')
+    songids=[]
+    songnames=[]
+    for i in range(len(infos)):
+        song_name=infos[i].string
+        songid=infos[i]['href'].split('=')[1]
+        songids.append(songid)
+        songnames.append(song_name)
+    return zip(songnames,songids)
+def get_lyric(song_id):
+    try:
+        url=r'http://music.163.com/api/song/lyric?'+'id='+str(song_id)+'&lv=1&kv=1&tv=-1'
+        html=get_html(url)
+        json_obj=json.loads(html)
+        inital_lyric=json_obj['lrc']['lyric']
+        regax=re.compile(r'\[.*\]')
+        final_lyric=re.sub(regax,'',inital_lyric).strip()
+        return final_lyric
+    except:
+        return ""
+
+def write_lyric(song_name,lyric):
+    try:
+        print('正在写入歌词:{}'.format(singername+'-'+song_name))
+        if not os.path.exists(r'歌词'):
+            os.mkdir('歌词')
+        with open(r'歌词\{}.txt'.format(singername+'-'+song_name),'a',encoding='utf-8') as f:
+            f.write(lyric)
+    except:
+        pass
+
+def download_song(song_name,song_id):
+    try:
+        singer_url="http://music.163.com/song/media/outer/url?id={}.mp3".format(song_id)
+        print('正在下载歌曲{}'.format(singername+'-'+song_name))
+        if not os.path.exists(r'song'):
+            os.mkdir('song')
+        request.urlretrieve(singer_url,r'song\{}.mp3'.format(singername+song_name))
+    except:
+        pass
+
+if __name__=='__main__':
+    singer_id=input('输入歌手ID：')
+    start_url="http://music.163.com/artist?id={}".format(singer_id)
+    print(start_url)
+    html=get_html(start_url)
+    singer_infos=get_singer_info(html)
+    for singer_info in singer_infos:
+        lyric=get_lyric(singer_info[1])
+        write_lyric(singer_info[0],lyric)
+        download_song(singer_info[0],singer_info[1])
+
